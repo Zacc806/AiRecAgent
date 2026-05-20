@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from yarl import URL
 
 TEMP_DIR = Path(gettempdir())
+RESUME_UPLOAD_DIR = TEMP_DIR / "resumes"
 
 
 class LogLevel(enum.StrEnum):
@@ -45,6 +46,22 @@ class Settings(BaseSettings):
     db_pass: str = "AiRecAgent"  # noqa: S105
     db_base: str = "AiRecAgent"
     db_echo: bool = False
+
+    # IMAP settings for fetching resumes from email
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    imap_user: str = ""
+    imap_pass: str = ""
+    imap_enabled: bool = False
+
+    # LLM
+    anthropic_api_key: str = ""
+
+    # Embedding model (multilingual, handles RU + EN)
+    embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
+
+    # Resume file storage
+    resume_upload_dir: Path = RESUME_UPLOAD_DIR
 
     @property
     def db_url(self) -> URL:

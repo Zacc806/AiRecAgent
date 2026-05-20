@@ -1,9 +1,9 @@
+from AiRecAgent.db.models.dummy_model import DummyModel
 from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from AiRecAgent.db.dependencies import get_db_session
-from AiRecAgent.db.models.dummy_model import DummyModel
 
 
 class DummyDAO:

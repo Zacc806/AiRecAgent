@@ -4,11 +4,10 @@ services:
       context: .
       target: dev
       dockerfile: ./Dockerfile
-    image: AiRecAgent:${AIRECAGENT_VERSION:-latest}
+    image: airecagent:${AIRECAGENT_VERSION:-latest}
     restart: always
     ports:
-      # Exposes application port.
-    - "8000:8000"
+      - "8000:8000"
     env_file:
       - path: .env
         required: false
@@ -23,8 +22,24 @@ services:
       AIRECAGENT_DB_USER: AiRecAgent
       AIRECAGENT_DB_PASS: AiRecAgent
       AIRECAGENT_DB_BASE: AiRecAgent
+      AIRECAGENT_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AIRECAGENT_IMAP_ENABLED: ${IMAP_ENABLED:-false}
+      AIRECAGENT_IMAP_HOST: ${IMAP_HOST:-imap.gmail.com}
+      AIRECAGENT_IMAP_USER: ${IMAP_USER:-}
+      AIRECAGENT_IMAP_PASS: ${IMAP_PASS:-}
     volumes:
       - .:/app/src/
+
+  streamlit:
+    build:
+      context: ./streamlit_app
+      dockerfile: Dockerfile
+    image: airecagent-streamlit:${AIRECAGENT_VERSION:-latest}
+    restart: always
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
 
   db:
     image: postgres:18.3-trixie
@@ -43,7 +58,6 @@ services:
       interval: 2s
       timeout: 3s
       retries: 40
-
 
 
 volumes:

@@ -19,6 +19,13 @@ dependencies = [
   "httptools >=0.7.1,<1",
   "pymongo >=4.15.4,<5",
   "loguru >=0.7.3,<1",
+  "anthropic >=0.40.0,<1",
+  "sentence-transformers >=3.0.0,<4",
+  "scikit-learn >=1.5.0,<2",
+  "pypdf >=4.0.0,<5",
+  "python-docx >=1.1.0,<2",
+  "python-multipart >=0.0.9,<1",
+  "numpy >=1.26.0,<3",
 ]
 
 [dependency-groups]
@@ -115,6 +122,8 @@ lint.ignore = [
     "D106",    # Missing docstring in public nested class
     "UP043",   # Unnecessary default argument specified (conflicts with mypy).
     "N999",    # Invalid module name (project uses CamelCase package name by design).
+    "E501",    # Line too long (string literals can't be wrapped without changing content).
+    "PLC0415", # Import outside top-level (intentional lazy imports for heavy optional deps).
 ]
 exclude = [
     "AiRecAgent/db/migrations",
