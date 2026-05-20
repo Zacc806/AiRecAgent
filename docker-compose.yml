@@ -1,0 +1,51 @@
+services:
+  api: &main_app
+    build:
+      context: .
+      target: dev
+      dockerfile: ./Dockerfile
+    image: AiRecAgent:${AIRECAGENT_VERSION:-latest}
+    restart: always
+    ports:
+      # Exposes application port.
+    - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      AIRECAGENT_HOST: 0.0.0.0
+      AIRECAGENT_RELOAD: "True"
+      AIRECAGENT_DB_HOST: AiRecAgent-db
+      AIRECAGENT_DB_PORT: 5432
+      AIRECAGENT_DB_USER: AiRecAgent
+      AIRECAGENT_DB_PASS: AiRecAgent
+      AIRECAGENT_DB_BASE: AiRecAgent
+    volumes:
+      - .:/app/src/
+
+  db:
+    image: postgres:18.3-trixie
+    hostname: AiRecAgent-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: "AiRecAgent"
+      POSTGRES_USER: "AiRecAgent"
+      POSTGRES_DB: "AiRecAgent"
+    volumes:
+      - AiRecAgent-db-data:/var/lib/postgresql
+    restart: always
+    healthcheck:
+      test: pg_isready -U AiRecAgent
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+
+
+volumes:
+  AiRecAgent-db-data:
+    name: AiRecAgent-db-data
