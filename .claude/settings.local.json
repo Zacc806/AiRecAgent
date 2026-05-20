@@ -4,7 +4,8 @@
       "Bash(uv sync *)",
       "PowerShell(Get-Command uv -ErrorAction SilentlyContinue; \\(Get-Command python\\).Source; python --version)",
       "PowerShell(cd \"c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\"; & \"$env:USERPROFILE\\\\.local\\\\bin\\\\uv.exe\" sync 2>&1)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(git commit *)"
     ]
   }
 }

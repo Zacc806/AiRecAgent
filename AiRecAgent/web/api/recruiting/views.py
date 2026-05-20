@@ -78,10 +78,32 @@ async def upload_resume(
     """Accept a resume file upload (PDF, DOCX, or TXT) and ingest it."""
     data = await file.read()
     filename = file.filename or "resume.txt"
+    logger.info(
+        "upload_resume: received file={!r} content_type={!r} size={} bytes",
+        filename,
+        file.content_type,
+        len(data),
+    )
+
     raw_text = resume_parser.extract_text(data, filename)
+    logger.info(
+        "upload_resume: extracted text_length={} chars from {!r}",
+        len(raw_text),
+        filename,
+    )
+
+    if not raw_text.strip():
+        logger.error("upload_resume: extracted text is empty for file={!r}", filename)
 
     parsed = resume_parser.parse_resume(raw_text, api_key=settings.anthropic_api_key)
-    logger.info("Parsed resume from {}: name={}", filename, parsed.get("name"))
+    logger.info(
+        "upload_resume: parse done for {!r} → name={!r} email={!r} skills={} exp={}",
+        filename,
+        parsed.get("name"),
+        parsed.get("email"),
+        len(parsed.get("skills") or []),
+        parsed.get("experience_years"),
+    )
 
     candidate = await candidate_dao.create(
         raw_text=raw_text,
@@ -91,6 +113,11 @@ async def upload_resume(
         experience_years=parsed.get("experience_years"),
         education=parsed.get("education"),
         source_file=filename,
+    )
+    logger.info(
+        "upload_resume: candidate created with id={} for file={!r}",
+        candidate.id,
+        filename,
     )
     return CandidateDTO.model_validate(candidate)
 
@@ -118,6 +145,18 @@ async def get_candidate(
     return CandidateDTO.model_validate(candidate)
 
 
+@router.delete("/candidates/{candidate_id}", status_code=204)
+async def delete_candidate(
+    candidate_id: int,
+    candidate_dao: CandidateDAO = Depends(),
+) -> None:
+    """Delete a candidate and their associated match scores."""
+    candidate = await candidate_dao.get_by_id(candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    await candidate_dao.delete(candidate)
+
+
 # ---------------------------------------------------------------------------
 # Recommendations
 # ---------------------------------------------------------------------------
@@ -127,6 +166,7 @@ async def get_candidate(
 async def get_recommendations(
     job_id: int,
     limit: int = 5,
+    refresh: bool = False,
     session: AsyncSession = Depends(get_db_session),
     job_dao: JobDAO = Depends(),
     candidate_dao: CandidateDAO = Depends(),
@@ -134,7 +174,8 @@ async def get_recommendations(
 ) -> RecommendationListDTO:
     """Return the top-N most relevant candidates for a given job.
 
-    Scores are computed via three approaches:
+    Scores are read from the database cache when available. Pass ?refresh=true
+    to force recomputation via:
     1. Semantic (Sentence-BERT cosine similarity)
     2. TF-IDF cosine similarity
     3. LLM (Claude) relevance scoring
@@ -147,14 +188,50 @@ async def get_recommendations(
     if not candidates:
         return RecommendationListDTO(job_id=job_id, recommendations=[])
 
+    cached = await match_dao.get_by_job_with_candidates(job_id)
+    cached_ids = {candidate.id for _, candidate in cached}
+    all_ids = {c.id for c in candidates}
+    new_ids = all_ids - cached_ids
+
+    # Determine which candidates actually need scoring.
+    # On refresh: score everyone. Otherwise: only those without a cached score.
+    score_only_ids: set[int] | None = None if refresh else new_ids
+
+    if score_only_ids is not None and not score_only_ids:
+        # Every candidate already has a score — serve the cache directly.
+        logger.info(
+            "get_recommendations: all {} candidate(s) cached for job_id={}",
+            len(cached),
+            job_id,
+        )
+        recs = [
+            RecommendationDTO(
+                candidate=CandidateDTO.model_validate(candidate),
+                semantic_score=match.semantic_score,
+                tfidf_score=match.tfidf_score,
+                llm_score=match.llm_score,
+                overall_score=match.overall_score or 0.0,
+                explanation=match.explanation or "",
+            )
+            for match, candidate in cached[:limit]
+        ]
+        return RecommendationListDTO(job_id=job_id, recommendations=recs)
+
+    logger.info(
+        "get_recommendations: scoring {} candidate(s) for job_id={} (refresh={})",
+        len(candidates) if score_only_ids is None else len(score_only_ids),
+        job_id,
+        refresh,
+    )
+
     scored = await orchestrator.get_recommendations(
         job=job,
         candidates=candidates,
         session=session,
-        top_k=limit,
+        top_k=len(candidates),  # return all so we can merge with cache below
+        score_only_ids=score_only_ids,
     )
 
-    # Persist scores for caching
     for s in scored:
         await match_dao.upsert(
             candidate_id=s.candidate.id,
@@ -166,16 +243,20 @@ async def get_recommendations(
             explanation=s.explanation,
         )
 
+    # Read the full ranked list back from the DB so old and new scores are
+    # sorted together correctly.
+    cached = await match_dao.get_by_job_with_candidates(job_id)
+
     recs = [
         RecommendationDTO(
-            candidate=CandidateDTO.model_validate(s.candidate),
-            semantic_score=s.semantic_score,
-            tfidf_score=s.tfidf_score,
-            llm_score=s.llm_score,
-            overall_score=s.overall_score,
-            explanation=s.explanation,
+            candidate=CandidateDTO.model_validate(candidate),
+            semantic_score=match.semantic_score,
+            tfidf_score=match.tfidf_score,
+            llm_score=match.llm_score,
+            overall_score=match.overall_score or 0.0,
+            explanation=match.explanation or "",
         )
-        for s in scored
+        for match, candidate in cached[:limit]
     ]
     return RecommendationListDTO(job_id=job_id, recommendations=recs)
 

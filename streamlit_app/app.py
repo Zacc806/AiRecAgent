@@ -39,6 +39,16 @@ def _post_json(path: str, body: dict) -> dict | None:
         return None
 
 
+def _delete(path: str) -> bool:
+    try:
+        r = requests.delete(f"{API_BASE}{path}", timeout=30)
+        r.raise_for_status()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"API error: {exc}")
+        return False
+
+
 def _post_file(path: str, file_bytes: bytes, filename: str) -> dict | None:
     try:
         r = requests.post(
@@ -78,17 +88,20 @@ with st.sidebar.expander("➕ Create new job"):
                 st.rerun()
 
 jobs_data = _get("/jobs") or []
-jobs = {j["id"]: j for j in jobs_data} if isinstance(jobs_data, list) else {}
+jobs_list = (
+    sorted(jobs_data, key=lambda j: j["id"]) if isinstance(jobs_data, list) else []
+)
+jobs = {j["id"]: j for j in jobs_list}
 
 if not jobs:
     st.sidebar.info("No jobs yet. Create one above.")
     selected_job_id = None
 else:
-    job_labels = {jid: f"#{jid} {j['title']}" for jid, j in jobs.items()}
+    job_ids = [j["id"] for j in jobs_list]
     selected_job_id = st.sidebar.selectbox(
         "Select job",
-        options=list(job_labels.keys()),
-        format_func=lambda x: job_labels[x],
+        options=job_ids,
+        format_func=lambda x: f"#{x} {jobs[x]['title']}",
     )
 
 st.sidebar.divider()
@@ -187,17 +200,27 @@ for rank, rec in enumerate(recs, start=1):
 with st.expander("All candidates"):
     candidates_data = _get("/candidates") or []
     if isinstance(candidates_data, list) and candidates_data:
-        rows = [
-            {
-                "ID": c["id"],
-                "Name": c.get("name") or "—",
-                "Email": c.get("email") or "—",
-                "Skills": ", ".join((c.get("skills") or [])[:5]),
-                "Exp (yrs)": c.get("experience_years"),
-                "File": c.get("source_file") or "—",
-            }
-            for c in candidates_data
-        ]
-        st.dataframe(rows, use_container_width=True)
+        header = st.columns([1, 2, 2, 3, 1, 2, 2, 1])
+        for col, label in zip(
+            header,
+            ["ID", "Name", "Email", "Skills", "Exp", "Education", "File", ""],
+        ):
+            col.markdown(f"**{label}**")
+        for c in candidates_data:
+            cols = st.columns([1, 2, 2, 3, 1, 2, 2, 1])
+            cols[0].write(c["id"])
+            cols[1].write(c.get("name") or "—")
+            cols[2].write(c.get("email") or "—")
+            cols[3].write(", ".join((c.get("skills") or [])[:5]) or "—")
+            cols[4].write(
+                f"{c['experience_years']:.1f}"
+                if c.get("experience_years") is not None
+                else "—"
+            )
+            cols[5].write(c.get("education") or "—")
+            cols[6].write(c.get("source_file") or "—")
+            if cols[7].button("🗑", key=f"del_{c['id']}"):
+                if _delete(f"/candidates/{c['id']}"):
+                    st.rerun()
     else:
         st.info("No candidates yet.")

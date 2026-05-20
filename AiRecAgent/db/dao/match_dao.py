@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from AiRecAgent.db.dependencies import get_db_session
+from AiRecAgent.db.models.candidate_model import CandidateModel
 from AiRecAgent.db.models.match_model import MatchModel
 
 
@@ -54,3 +55,16 @@ class MatchDAO:
             .order_by(MatchModel.overall_score.desc()),
         )
         return list(result.scalars().fetchall())
+
+    async def get_by_job_with_candidates(
+        self,
+        job_id: int,
+    ) -> list[tuple[MatchModel, CandidateModel]]:
+        """Return match records for a job joined with their candidate, sorted by score."""
+        result = await self.session.execute(
+            select(MatchModel, CandidateModel)
+            .join(CandidateModel, MatchModel.candidate_id == CandidateModel.id)
+            .where(MatchModel.job_id == job_id)
+            .order_by(MatchModel.overall_score.desc()),
+        )
+        return list(result.tuples().fetchall())

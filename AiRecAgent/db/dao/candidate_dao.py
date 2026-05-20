@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import Depends
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,8 +40,16 @@ class CandidateDAO:
             source_file=source_file,
         )
         self.session.add(candidate)
+        logger.debug(
+            "CandidateDAO.create: flushing session for source_file={!r}", source_file
+        )
         await self.session.flush()
         await self.session.refresh(candidate)
+        logger.info(
+            "CandidateDAO.create: flushed candidate id={} email={!r}",
+            candidate.id,
+            candidate.email,
+        )
         return candidate
 
     async def get_by_id(self, candidate_id: int) -> CandidateModel | None:
@@ -55,7 +64,14 @@ class CandidateDAO:
         result = await self.session.execute(
             select(CandidateModel).limit(limit).offset(offset),
         )
-        return list(result.scalars().fetchall())
+        rows = list(result.scalars().fetchall())
+        logger.debug(
+            "CandidateDAO.get_all: limit={} offset={} → {} row(s)",
+            limit,
+            offset,
+            len(rows),
+        )
+        return rows
 
     async def get_with_embeddings(self) -> list[CandidateModel]:
         """Return candidates that have a computed embedding."""
@@ -72,6 +88,11 @@ class CandidateDAO:
         """Persist an embedding vector onto an existing candidate."""
         candidate.embedding = embedding  # type: ignore[assignment]
         self.session.add(candidate)
+
+    async def delete(self, candidate: CandidateModel) -> None:
+        """Delete a candidate record."""
+        await self.session.delete(candidate)
+        await self.session.flush()
 
     async def update_parsed_fields(
         self,
