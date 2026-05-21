@@ -7,7 +7,8 @@
       "Bash(uv run *)",
       "Bash(git commit *)",
       "Bash(Get-ChildItem -Recurse -Force)",
-      "Bash(Select-Object FullName, PSIsContainer)"
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(git add *)"
     ]
   }
 }
