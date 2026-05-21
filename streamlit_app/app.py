@@ -25,7 +25,7 @@ def _get(path: str, params: dict | None = None) -> dict | list | None:
         r.raise_for_status()
         return r.json()
     except Exception as exc:  # noqa: BLE001
-        st.error(f"API error: {exc}")
+        st.error(f"Ошибка API: {exc}")
         return None
 
 
@@ -35,7 +35,7 @@ def _post_json(path: str, body: dict) -> dict | None:
         r.raise_for_status()
         return r.json()
     except Exception as exc:  # noqa: BLE001
-        st.error(f"API error: {exc}")
+        st.error(f"Ошибка API: {exc}")
         return None
 
 
@@ -45,7 +45,7 @@ def _delete(path: str) -> bool:
         r.raise_for_status()
         return True
     except Exception as exc:  # noqa: BLE001
-        st.error(f"API error: {exc}")
+        st.error(f"Ошибка API: {exc}")
         return False
 
 
@@ -59,7 +59,7 @@ def _post_file(path: str, file_bytes: bytes, filename: str) -> dict | None:
         r.raise_for_status()
         return r.json()
     except Exception as exc:  # noqa: BLE001
-        st.error(f"API error: {exc}")
+        st.error(f"Ошибка API: {exc}")
         return None
 
 
@@ -67,14 +67,14 @@ def _post_file(path: str, file_bytes: bytes, filename: str) -> dict | None:
 # Sidebar — Jobs
 # ---------------------------------------------------------------------------
 
-st.sidebar.header("Jobs")
+st.sidebar.header("Вакансии")
 
-with st.sidebar.expander("➕ Create new job"):
+with st.sidebar.expander("➕ Создать вакансию"):
     with st.form("create_job_form"):
-        title = st.text_input("Title")
-        description = st.text_area("Description", height=120)
-        requirements = st.text_area("Requirements (optional)", height=80)
-        if st.form_submit_button("Create"):
+        title = st.text_input("Название")
+        description = st.text_area("Описание", height=120)
+        requirements = st.text_area("Требования (необязательно)", height=80)
+        if st.form_submit_button("Создать"):
             result = _post_json(
                 "/jobs",
                 {
@@ -84,7 +84,7 @@ with st.sidebar.expander("➕ Create new job"):
                 },
             )
             if result:
-                st.success(f"Created job #{result['id']}")
+                st.success(f"Вакансия #{result['id']} создана")
                 st.rerun()
 
 jobs_data = _get("/jobs") or []
@@ -94,12 +94,12 @@ jobs_list = (
 jobs = {j["id"]: j for j in jobs_list}
 
 if not jobs:
-    st.sidebar.info("No jobs yet. Create one above.")
+    st.sidebar.info("Вакансий пока нет. Создайте выше.")
     selected_job_id = None
 else:
     job_ids = [j["id"] for j in jobs_list]
     selected_job_id = st.sidebar.selectbox(
-        "Select job",
+        "Выберите вакансию",
         options=job_ids,
         format_func=lambda x: f"#{x} {jobs[x]['title']}",
     )
@@ -107,64 +107,78 @@ else:
 st.sidebar.divider()
 
 # Upload resume
-st.sidebar.header("Upload Resume")
+st.sidebar.header("Загрузить резюме")
 uploaded = st.sidebar.file_uploader(
-    "PDF, DOCX, or TXT",
+    "PDF, DOCX или TXT",
     type=["pdf", "docx", "doc", "txt"],
 )
-if uploaded and st.sidebar.button("Upload"):
+if uploaded and st.sidebar.button("Загрузить"):
     result = _post_file("/resumes/upload", uploaded.read(), uploaded.name)
     if result:
         st.sidebar.success(
-            f"Imported: {result.get('name') or result.get('email') or 'Unknown'}"
+            f"Импортировано: {result.get('name') or result.get('email') or 'Неизвестно'}"
         )
 
 st.sidebar.divider()
 
-# Email poll
-st.sidebar.header("Email Inbox")
-if st.sidebar.button("📬 Poll email inbox"):
-    result = _post_json("/email/poll", {})
+# Email inbox stats — auto-refreshes every 30 s to match the background poll interval
+st.sidebar.header("Входящие письма")
+
+
+@st.fragment(run_every=30)
+def _email_stats_widget() -> None:
+    result = _get("/email/stats")
     if result:
-        st.sidebar.info(
-            f"Fetched {result['fetched']} emails, imported {result['imported']} resumes"
-        )
+        col1, col2 = st.columns(2)
+        col1.metric("Проверено писем", result["emails_checked"])
+        col2.metric("Найдено вложений", result["attachments_found"])
+        last = result.get("last_poll_at")
+        if last:
+            st.caption(f"Последняя проверка: {last[:19].replace('T', ' ')} UTC")
+        else:
+            st.caption("Ожидание первой проверки…")
+
+
+with st.sidebar:
+    _email_stats_widget()
 
 # ---------------------------------------------------------------------------
 # Main panel — Recommendations
 # ---------------------------------------------------------------------------
 
 if selected_job_id is None:
-    st.info("Select or create a job in the sidebar to see recommendations.")
+    st.info(
+        "Выберите или создайте вакансию на боковой панели, чтобы увидеть рекомендации."
+    )
     st.stop()
 
 job = jobs[selected_job_id]
-st.subheader(f"Job: {job['title']}")
-with st.expander("Job description"):
+st.subheader(f"Вакансия: {job['title']}")
+with st.expander("Описание вакансии"):
     st.write(job["description"])
     if job.get("requirements"):
-        st.markdown("**Requirements:**")
+        st.markdown("**Требования:**")
         st.write(job["requirements"])
 
-top_k = st.slider("Top candidates", min_value=1, max_value=20, value=5)
+top_k = st.slider("Топ кандидатов", min_value=1, max_value=20, value=5)
 
-with st.spinner("Scoring candidates…"):
+with st.spinner("Оценка кандидатов…"):
     data = _get("/recommendations", params={"job_id": selected_job_id, "limit": top_k})
 
 if data is None or not isinstance(data, dict):
-    st.warning("No data returned.")
+    st.warning("Данные не получены.")
     st.stop()
 
 recs = data.get("recommendations", [])
 if not recs:
-    st.info("No candidates found. Upload some resumes first.")
+    st.info("Кандидаты не найдены. Сначала загрузите резюме.")
     st.stop()
 
-st.markdown(f"### Top {len(recs)} candidates")
+st.markdown(f"### Топ {len(recs)} кандидатов")
 
 for rank, rec in enumerate(recs, start=1):
     c = rec["candidate"]
-    name = c.get("name") or c.get("email") or f"Candidate #{c['id']}"
+    name = c.get("name") or c.get("email") or f"Кандидат #{c['id']}"
     overall = rec["overall_score"]
 
     with st.container(border=True):
@@ -174,15 +188,15 @@ for rank, rec in enumerate(recs, start=1):
             if c.get("email"):
                 st.caption(f"✉ {c['email']}")
             if c.get("skills"):
-                st.markdown("**Skills:** " + ", ".join(c["skills"][:10]))
+                st.markdown("**Навыки:** " + ", ".join(c["skills"][:10]))
             if c.get("experience_years") is not None:
-                st.caption(f"Experience: {c['experience_years']:.1f} yrs")
+                st.caption(f"Опыт: {c['experience_years']:.1f} лет")
             if c.get("education"):
-                st.caption(f"Education: {c['education']}")
+                st.caption(f"Образование: {c['education']}")
         with col2:
-            st.metric("Overall", f"{overall:.2%}")
+            st.metric("Итого", f"{overall:.2%}")
             scores = {
-                "Semantic": rec.get("semantic_score"),
+                "Семантика": rec.get("semantic_score"),
                 "TF-IDF": rec.get("tfidf_score"),
                 "LLM": rec.get("llm_score"),
             }
@@ -197,13 +211,13 @@ for rank, rec in enumerate(recs, start=1):
 # Candidates table
 # ---------------------------------------------------------------------------
 
-with st.expander("All candidates"):
+with st.expander("Все кандидаты"):
     candidates_data = _get("/candidates") or []
     if isinstance(candidates_data, list) and candidates_data:
         header = st.columns([1, 2, 2, 3, 1, 2, 2, 1])
         for col, label in zip(
             header,
-            ["ID", "Name", "Email", "Skills", "Exp", "Education", "File", ""],
+            ["ID", "Имя", "Email", "Навыки", "Опыт", "Образование", "Файл", ""],
         ):
             col.markdown(f"**{label}**")
         for c in candidates_data:
@@ -223,4 +237,4 @@ with st.expander("All candidates"):
                 if _delete(f"/candidates/{c['id']}"):
                     st.rerun()
     else:
-        st.info("No candidates yet.")
+        st.info("Кандидатов пока нет.")

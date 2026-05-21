@@ -17,7 +17,7 @@ CANDIDATE RESUME:
 Return ONLY a valid JSON object:
 {{
   "score": <float between 0.0 and 1.0>,
-  "explanation": "<one or two sentences explaining the score in the resume's language>"
+  "explanation": "<one or two sentences explaining the score in Russian>"
 }}
 
 JSON output:"""

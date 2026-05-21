@@ -63,3 +63,11 @@ class EmailPollResultDTO(BaseModel):
 
     fetched: int
     imported: int
+
+
+class EmailStatsDTO(BaseModel):
+    """Cumulative email polling statistics since server start."""
+
+    last_poll_at: datetime | None
+    emails_checked: int
+    attachments_found: int

@@ -98,6 +98,22 @@ def _regex_fallback(text: str) -> dict[str, Any]:
     return result
 
 
+def _normalize_edu_list(edu: list[Any]) -> str | None:
+    """Convert a list of education dicts/strings into a semicolon-separated string."""
+    parts: list[str] = []
+    for entry in edu:
+        if isinstance(entry, dict):
+            pieces = [
+                str(entry[k])
+                for k in ("degree", "field_of_study", "institution", "graduation_year")
+                if entry.get(k)
+            ]
+            parts.append(", ".join(pieces))
+        elif isinstance(entry, str):
+            parts.append(entry)
+    return "; ".join(parts) if parts else None
+
+
 def _parse_with_llm(text: str, api_key: str) -> dict[str, Any]:
     """Use Claude to extract structured fields from resume text."""
     import anthropic
@@ -107,9 +123,11 @@ def _parse_with_llm(text: str, api_key: str) -> dict[str, Any]:
 Return ONLY a valid JSON object with these fields:
 - name: full name of the candidate (string or null)
 - email: email address (string or null)
-- skills: list of technical skills and technologies (array of strings)
+- skills: list of technical skills and technologies in RUSSIAN (array of strings). Translate skill names to Russian where a standard Russian translation exists (e.g. "Machine Learning" → "Машинное обучение", "Project Management" → "Управление проектами"). Keep widely used abbreviations and proper nouns as-is (e.g. Python, SQL, AWS, Docker, React).
 - experience_years: total years of work experience as a number (float or null)
-- education: list of education entries, each with keys: degree (e.g. "Bachelor's", "Master's", "PhD"), field_of_study, institution, graduation_year. The institution name and degree may appear on separate lines within the same education section — group them together as one entry. (array of objects, or null if no education found)
+- education: list of education entries in RUSSIAN, each with keys: degree (translate to Russian, e.g. "Бакалавр", "Магистр", "Доктор наук", "MBA"), field_of_study (translate to Russian), institution (keep original name), graduation_year. The institution name and degree may appear on separate lines within the same education section — group them together as one entry. (array of objects, or null if no education found)
+
+All text fields except name, email, and institution names must be in Russian.
 
 Resume text:
 {text[:4000]}
@@ -132,27 +150,10 @@ JSON output:"""
     raw = re.sub(r"\s*```$", "", raw)
     try:
         parsed: dict[str, Any] = json.loads(raw)
-        # Normalize education: list of objects → human-readable string
+        # Normalize education: list of objects → human-readable Russian string
         edu = parsed.get("education")
         if isinstance(edu, list):
-            parts = []
-            for entry in edu:
-                if isinstance(entry, dict):
-                    parts.append(
-                        ", ".join(
-                            str(v)
-                            for v in [
-                                entry.get("degree"),
-                                entry.get("field_of_study"),
-                                entry.get("institution"),
-                                entry.get("graduation_year"),
-                            ]
-                            if v
-                        )
-                    )
-                elif isinstance(entry, str):
-                    parts.append(entry)
-            parsed["education"] = "; ".join(parts) if parts else None
+            parsed["education"] = _normalize_edu_list(edu)
         logger.info(
             "LLM parse → name={!r} email={!r} skills={} experience_years={} education={!r}",
             parsed.get("name"),

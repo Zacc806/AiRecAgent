@@ -14,6 +14,7 @@ from AiRecAgent.settings import settings
 from AiRecAgent.web.api.recruiting.schema import (
     CandidateDTO,
     EmailPollResultDTO,
+    EmailStatsDTO,
     JobCreateDTO,
     JobDTO,
     RecommendationDTO,
@@ -264,6 +265,12 @@ async def get_recommendations(
 # ---------------------------------------------------------------------------
 # Email polling
 # ---------------------------------------------------------------------------
+
+
+@router.get("/email/stats", response_model=EmailStatsDTO)
+async def email_stats() -> EmailStatsDTO:
+    """Return cumulative email polling statistics since server start."""
+    return EmailStatsDTO(**email_service.get_stats())
 
 
 @router.post("/email/poll", response_model=EmailPollResultDTO)
