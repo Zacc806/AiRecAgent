@@ -10,6 +10,7 @@ from AiRecAgent.db.meta import meta
 from AiRecAgent.db.models import load_all_models
 from AiRecAgent.services import email_service
 from AiRecAgent.services.matching.semantic import _load_model
+from AiRecAgent.services.nlp_pipeline import _get_nlp
 from AiRecAgent.settings import settings
 
 _IMAP_POLL_INTERVAL_SECONDS = 30
@@ -81,6 +82,9 @@ async def _import_attachments(
                     parsed.get("experience_years"),
                 )
 
+                saved_path = resume_parser.save_resume_file(
+                    data, filename, settings.resume_upload_dir
+                )
                 await candidate_dao.create(
                     raw_text=raw_text,
                     name=parsed.get("name"),
@@ -88,7 +92,8 @@ async def _import_attachments(
                     skills=parsed.get("skills") or [],
                     experience_years=parsed.get("experience_years"),
                     education=parsed.get("education"),
-                    source_file=filename,
+                    nlp_data=parsed.get("nlp_data"),
+                    source_file=saved_path,
                 )
                 imported += 1
             except Exception as exc:
@@ -146,6 +151,11 @@ async def lifespan_setup(
     :return: function that actually performs actions.
     """
 
+    settings.resume_upload_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(
+        "lifespan: resume upload dir ready at {!r}", str(settings.resume_upload_dir)
+    )
+
     app.middleware_stack = None
     _setup_db(app)
     await _create_tables()
@@ -158,6 +168,11 @@ async def lifespan_setup(
         None, _load_model, settings.embedding_model
     )
     logger.info("lifespan: embedding model ready")
+
+    # Pre-warm the spaCy NLP pipeline (tokenization, NER, keyword extraction).
+    logger.info("lifespan: loading spaCy NLP pipeline…")
+    await asyncio.get_event_loop().run_in_executor(None, _get_nlp)
+    logger.info("lifespan: spaCy NLP pipeline ready")
 
     # Record UIDNEXT so existing inbox emails are never imported.
     email_service.initialize_watermark(settings)

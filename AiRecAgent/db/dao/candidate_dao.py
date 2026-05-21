@@ -26,6 +26,7 @@ class CandidateDAO:
         experience_years: float | None = None,
         education: str | None = None,
         embedding: list[float] | None = None,
+        nlp_data: dict[str, Any] | None = None,
         source_file: str | None = None,
     ) -> CandidateModel:
         """Create and persist a new candidate record."""
@@ -37,6 +38,7 @@ class CandidateDAO:
             experience_years=experience_years,
             education=education,
             embedding=embedding,
+            nlp_data=nlp_data,
             source_file=source_file,
         )
         self.session.add(candidate)

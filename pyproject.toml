@@ -26,6 +26,7 @@ dependencies = [
   "python-docx >=1.1.0,<2",
   "python-multipart >=0.0.9,<1",
   "numpy >=1.26.0,<3",
+  "spacy>=3.7.0,<4",
 ]
 
 [dependency-groups]
@@ -125,11 +126,11 @@ lint.ignore = [
     "E501",    # Line too long (string literals can't be wrapped without changing content).
     "PLC0415", # Import outside top-level (intentional lazy imports for heavy optional deps).
 ]
+lint.mccabe = { max-complexity = 10 }
 exclude = [
     "AiRecAgent/db/migrations",
     ".venv/"
 ]
-lint.mccabe = { max-complexity = 10 }
 line-length = 88
 
 [tool.ruff.lint.per-file-ignores]

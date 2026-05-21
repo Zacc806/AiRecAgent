@@ -22,6 +22,7 @@ class CandidateModel(Base):
     experience_years: Mapped[float | None] = mapped_column(Float, nullable=True)
     education: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[Any] = mapped_column(JSON, nullable=True)
+    nlp_data: Mapped[Any] = mapped_column(JSON, nullable=True)
     source_file: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

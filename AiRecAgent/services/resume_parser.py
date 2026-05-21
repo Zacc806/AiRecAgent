@@ -1,12 +1,31 @@
 """Resume file parsing and structured data extraction."""
 
+from __future__ import annotations
+
 import io
 import json
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from AiRecAgent.services import nlp_pipeline
+
+
+def save_resume_file(data: bytes, filename: str, upload_dir: Path) -> str:
+    """Write *data* to *upload_dir* and return the saved file's absolute path string.
+
+    A UUID-prefixed name is used so concurrent uploads never collide even when
+    the original filename is identical.
+    """
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(filename).suffix.lower()
+    dest = upload_dir / f"{uuid.uuid4().hex}{ext}"
+    dest.write_bytes(data)
+    logger.info("save_resume_file: wrote {} bytes → {!r}", len(data), str(dest))
+    return str(dest)
 
 
 def _extract_text_from_pdf(data: bytes) -> str:
@@ -74,7 +93,7 @@ def _extract_education(text: str) -> str | None:
 
 
 def _regex_fallback(text: str) -> dict[str, Any]:
-    """Extract basic fields with regex when no LLM key is configured."""
+    """Extract basic fields with regex + NLP pipeline when no LLM key is configured."""
     email_match = re.search(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}", text)
     years_match = re.search(
         r"(\d+(?:\.\d+)?)\s*(?:year|лет|год|года)\b",
@@ -82,18 +101,31 @@ def _regex_fallback(text: str) -> dict[str, Any]:
         re.IGNORECASE,
     )
     education = _extract_education(text)
+
+    # Run NLP pipeline to supplement name and skills
+    nlp_result = nlp_pipeline.run_pipeline(text)
+    persons = nlp_result.entities.get("PERSON", [])
+    name_from_nlp = persons[0] if persons else None
+
     result: dict[str, Any] = {
-        "name": None,
+        "name": name_from_nlp,
         "email": email_match.group(0) if email_match else None,
-        "skills": [],
+        "skills": nlp_result.keywords[:15],
         "experience_years": float(years_match.group(1)) if years_match else None,
         "education": education,
+        "nlp_data": {
+            "tokens_count": nlp_result.tokens_count,
+            "entities": nlp_result.entities,
+            "keywords": nlp_result.keywords,
+        },
     }
     logger.info(
-        "regex_fallback → email={!r} experience_years={} education={!r}",
+        "regex_fallback → name={!r} email={!r} experience_years={} education={!r} nlp_keywords={}",
+        result["name"],
         result["email"],
         result["experience_years"],
         result["education"],
+        len(nlp_result.keywords),
     )
     return result
 
@@ -154,13 +186,27 @@ JSON output:"""
         edu = parsed.get("education")
         if isinstance(edu, list):
             parsed["education"] = _normalize_edu_list(edu)
+
+        # Run NLP pipeline and attach its output alongside LLM results
+        nlp_result = nlp_pipeline.run_pipeline(text)
+        parsed["nlp_data"] = {
+            "tokens_count": nlp_result.tokens_count,
+            "entities": nlp_result.entities,
+            "keywords": nlp_result.keywords,
+        }
+        # Merge NLP keywords into skills (deduplicated, LLM skills take precedence)
+        llm_skills_lower = {s.lower() for s in (parsed.get("skills") or [])}
+        extra = [kw for kw in nlp_result.keywords if kw not in llm_skills_lower]
+        parsed["skills"] = list(parsed.get("skills") or []) + extra[:5]
+
         logger.info(
-            "LLM parse → name={!r} email={!r} skills={} experience_years={} education={!r}",
+            "LLM parse → name={!r} email={!r} skills={} experience_years={} education={!r} nlp_keywords={}",
             parsed.get("name"),
             parsed.get("email"),
             len(parsed.get("skills") or []),
             parsed.get("experience_years"),
             parsed.get("education"),
+            len(nlp_result.keywords),
         )
         return parsed
     except json.JSONDecodeError as exc:

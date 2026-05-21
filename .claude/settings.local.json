@@ -8,7 +8,14 @@
       "Bash(git commit *)",
       "Bash(Get-ChildItem -Recurse -Force)",
       "Bash(Select-Object FullName, PSIsContainer)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\" -Recurse -Force)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m pip install \"spacy>=3.7.0,<4\")",
+      "Bash(.venv\\\\Scripts\\\\python.exe -c \"import socket; s=socket.socket\\(\\); s.settimeout\\(1\\); r=s.connect_ex\\(\\('localhost',5432\\)\\); print\\('DB reachable' if r==0 else f'DB not reachable: errno={r}'\\); s.close\\(\\)\")",
+      "PowerShell($sock = New-Object System.Net.Sockets.TcpClient; try { $sock.Connect\\(\"localhost\", 5432\\); \"DB reachable\" } catch { \"DB not reachable: $_\" } finally { $sock.Close\\(\\) })",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\" -Recurse -File | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\('c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\\\\', ''\\) } | Sort-Object)",
+      "Bash(grep -E \"\\\\.\\(md|txt|yaml|yml\\)$\")"
     ]
   }
 }

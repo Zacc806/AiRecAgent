@@ -19,9 +19,21 @@ class JobDAO:
         title: str,
         description: str,
         requirements: str | None = None,
+        required_skills: list[str] | None = None,
+        experience_level: str | None = None,
+        tech_stack: list[str] | None = None,
+        nlp_keywords: list[str] | None = None,
     ) -> JobModel:
         """Create and persist a new job posting."""
-        job = JobModel(title=title, description=description, requirements=requirements)
+        job = JobModel(
+            title=title,
+            description=description,
+            requirements=requirements,
+            required_skills=required_skills or [],
+            experience_level=experience_level,
+            tech_stack=tech_stack or [],
+            nlp_keywords=nlp_keywords or [],
+        )
         self.session.add(job)
         await self.session.flush()
         await self.session.refresh(job)

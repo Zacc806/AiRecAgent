@@ -8,7 +8,7 @@ from AiRecAgent.db.dao.candidate_dao import CandidateDAO
 from AiRecAgent.db.dao.job_dao import JobDAO
 from AiRecAgent.db.dao.match_dao import MatchDAO
 from AiRecAgent.db.dependencies import get_db_session
-from AiRecAgent.services import email_service, resume_parser
+from AiRecAgent.services import email_service, job_parser, resume_parser
 from AiRecAgent.services.matching import orchestrator
 from AiRecAgent.settings import settings
 from AiRecAgent.web.api.recruiting.schema import (
@@ -35,10 +35,20 @@ async def create_job(
     job_dao: JobDAO = Depends(),
 ) -> JobDTO:
     """Create a new job posting."""
+    parsed_job = job_parser.parse_job(
+        title=body.title,
+        description=body.description,
+        requirements=body.requirements,
+        api_key=settings.anthropic_api_key,
+    )
     job = await job_dao.create(
         title=body.title,
         description=body.description,
         requirements=body.requirements,
+        required_skills=parsed_job.get("required_skills"),
+        experience_level=parsed_job.get("experience_level"),
+        tech_stack=parsed_job.get("tech_stack"),
+        nlp_keywords=parsed_job.get("nlp_keywords"),
     )
     return JobDTO.model_validate(job)
 
@@ -86,6 +96,10 @@ async def upload_resume(
         len(data),
     )
 
+    saved_path = resume_parser.save_resume_file(
+        data, filename, settings.resume_upload_dir
+    )
+
     raw_text = resume_parser.extract_text(data, filename)
     logger.info(
         "upload_resume: extracted text_length={} chars from {!r}",
@@ -113,7 +127,8 @@ async def upload_resume(
         skills=parsed.get("skills") or [],
         experience_years=parsed.get("experience_years"),
         education=parsed.get("education"),
-        source_file=filename,
+        nlp_data=parsed.get("nlp_data"),
+        source_file=saved_path,
     )
     logger.info(
         "upload_resume: candidate created with id={} for file={!r}",
@@ -282,6 +297,9 @@ async def poll_email(
     imported = 0
     for filename, data in attachments:
         try:
+            saved_path = resume_parser.save_resume_file(
+                data, filename, settings.resume_upload_dir
+            )
             raw_text = resume_parser.extract_text(data, filename)
             parsed = resume_parser.parse_resume(
                 raw_text, api_key=settings.anthropic_api_key
@@ -293,7 +311,8 @@ async def poll_email(
                 skills=parsed.get("skills") or [],
                 experience_years=parsed.get("experience_years"),
                 education=parsed.get("education"),
-                source_file=filename,
+                nlp_data=parsed.get("nlp_data"),
+                source_file=saved_path,
             )
             imported += 1
         except Exception as exc:

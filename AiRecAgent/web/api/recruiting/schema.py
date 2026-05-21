@@ -22,6 +22,10 @@ class JobDTO(BaseModel):
     title: str
     description: str
     requirements: str | None
+    required_skills: list[str] | None
+    experience_level: str | None
+    tech_stack: list[str] | None
+    nlp_keywords: list[str] | None
     created_at: datetime
 
 

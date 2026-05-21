@@ -52,10 +52,18 @@ def _weighted_score(
 
 
 def _build_job_text(job: JobModel) -> str:
-    """Concatenate job fields into a single text for vectorisation."""
+    """Concatenate job fields into a single text for vectorisation.
+
+    Structured fields (required_skills, tech_stack) are appended so that
+    the NLP-parsed job structure is reflected in TF-IDF and semantic scores.
+    """
     parts = [job.title, job.description]
     if job.requirements:
         parts.append(job.requirements)
+    if job.required_skills:
+        parts.append("Required skills: " + ", ".join(job.required_skills))  # type: ignore[arg-type]
+    if job.tech_stack:
+        parts.append("Tech stack: " + ", ".join(job.tech_stack))  # type: ignore[arg-type]
     return "\n".join(parts)
 
 
