@@ -15,7 +15,23 @@
       "Bash(.venv\\\\Scripts\\\\python.exe -c \"import socket; s=socket.socket\\(\\); s.settimeout\\(1\\); r=s.connect_ex\\(\\('localhost',5432\\)\\); print\\('DB reachable' if r==0 else f'DB not reachable: errno={r}'\\); s.close\\(\\)\")",
       "PowerShell($sock = New-Object System.Net.Sockets.TcpClient; try { $sock.Connect\\(\"localhost\", 5432\\); \"DB reachable\" } catch { \"DB not reachable: $_\" } finally { $sock.Close\\(\\) })",
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\" -Recurse -File | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\('c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\\\\', ''\\) } | Sort-Object)",
-      "Bash(grep -E \"\\\\.\\(md|txt|yaml|yml\\)$\")"
+      "Bash(grep -E \"\\\\.\\(md|txt|yaml|yml\\)$\")",
+      "Bash(python -c \"from tempfile import gettempdir; print\\(gettempdir\\(\\)\\)\")",
+      "Bash(python -c \"from AiRecAgent.services.matching.tfidf import score_candidates; r = score_candidates\\(['python developer with django', 'java developer spring boot', 'data scientist tensorflow pytorch'], 'python backend engineer django rest api'\\); print\\(r\\)\")",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -c ' *)",
+      "Bash(docker compose *)",
+      "Bash(curl -s \"http://localhost:8000/api/v1/recommendations?job_id=123\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/jobs\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/recommendations?job_id=1&limit=3\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/recommendations?job_text=Python+developer+FastAPI+PostgreSQL&limit=2\")",
+      "Bash(docker exec *)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\" -Recurse -Directory | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"c:\\\\Users\\\\main\\\\Documents\\\\AiRecAgent\"\\), \".\" } | Sort-Object)",
+      "Read(//c/Users/main/Documents/**)",
+      "Bash(compose)",
+      "Bash(pyproject)",
+      "Bash(\\\\.env)",
+      "Bash(requirements\")"
     ]
   }
 }

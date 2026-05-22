@@ -146,66 +146,100 @@ with st.sidebar:
 # Main panel — Recommendations
 # ---------------------------------------------------------------------------
 
-if selected_job_id is None:
-    st.info(
-        "Выберите или создайте вакансию на боковой панели, чтобы увидеть рекомендации."
+
+def _render_recs(recs: list, top_k: int) -> None:
+    """Render a ranked candidate list."""
+    if not recs:
+        st.info("Кандидаты не найдены. Сначала загрузите резюме.")
+        return
+    st.markdown(f"### Топ {len(recs)} кандидатов")
+    for rank, rec in enumerate(recs, start=1):
+        c = rec["candidate"]
+        name = c.get("name") or c.get("email") or f"Кандидат #{c['id']}"
+        overall = rec["overall_score"]
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"**#{rank} — {name}**")
+                if c.get("email"):
+                    st.caption(f"✉ {c['email']}")
+                if c.get("skills"):
+                    st.markdown("**Навыки:** " + ", ".join(c["skills"][:10]))
+                if c.get("experience_years") is not None:
+                    st.caption(f"Опыт: {c['experience_years']:.1f} лет")
+                if c.get("education"):
+                    st.caption(f"Образование: {c['education']}")
+            with col2:
+                st.metric("Итого", f"{overall:.2%}")
+                scores = {
+                    "Семантика": rec.get("semantic_score"),
+                    "TF-IDF": rec.get("tfidf_score"),
+                    "LLM": rec.get("llm_score"),
+                }
+                for label, val in scores.items():
+                    if val is not None:
+                        st.caption(f"{label}: {val:.2%}")
+            if rec.get("explanation"):
+                st.info(f"💬 {rec['explanation']}")
+
+
+tab_stored, tab_adhoc = st.tabs(["По вакансии из базы", "Новая вакансия (текст)"])
+
+with tab_stored:
+    if selected_job_id is None:
+        st.info(
+            "Выберите или создайте вакансию на боковой панели, чтобы увидеть рекомендации."
+        )
+    else:
+        job = jobs[selected_job_id]
+        st.subheader(f"Вакансия: {job['title']}")
+        with st.expander("Описание вакансии"):
+            st.write(job["description"])
+            if job.get("requirements"):
+                st.markdown("**Требования:**")
+                st.write(job["requirements"])
+
+        top_k = st.slider(
+            "Топ кандидатов", min_value=1, max_value=20, value=5, key="top_k_stored"
+        )
+
+        with st.spinner("Оценка кандидатов…"):
+            data = _get(
+                "/recommendations", params={"job_id": selected_job_id, "limit": top_k}
+            )
+
+        if data is None or not isinstance(data, dict):
+            st.warning("Данные не получены.")
+        else:
+            _render_recs(data.get("recommendations", []), top_k)
+
+with tab_adhoc:
+    st.markdown(
+        "Вставьте текст вакансии, чтобы немедленно получить подборку кандидатов — без сохранения в базе."
     )
-    st.stop()
+    adhoc_text = st.text_area(
+        "Текст вакансии",
+        height=200,
+        key="adhoc_job_text",
+        placeholder="Например: Требуется Python-разработчик с опытом FastAPI и PostgreSQL…",
+    )
+    top_k_adhoc = st.slider(
+        "Топ кандидатов", min_value=1, max_value=20, value=5, key="top_k_adhoc"
+    )
 
-job = jobs[selected_job_id]
-st.subheader(f"Вакансия: {job['title']}")
-with st.expander("Описание вакансии"):
-    st.write(job["description"])
-    if job.get("requirements"):
-        st.markdown("**Требования:**")
-        st.write(job["requirements"])
-
-top_k = st.slider("Топ кандидатов", min_value=1, max_value=20, value=5)
-
-with st.spinner("Оценка кандидатов…"):
-    data = _get("/recommendations", params={"job_id": selected_job_id, "limit": top_k})
-
-if data is None or not isinstance(data, dict):
-    st.warning("Данные не получены.")
-    st.stop()
-
-recs = data.get("recommendations", [])
-if not recs:
-    st.info("Кандидаты не найдены. Сначала загрузите резюме.")
-    st.stop()
-
-st.markdown(f"### Топ {len(recs)} кандидатов")
-
-for rank, rec in enumerate(recs, start=1):
-    c = rec["candidate"]
-    name = c.get("name") or c.get("email") or f"Кандидат #{c['id']}"
-    overall = rec["overall_score"]
-
-    with st.container(border=True):
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown(f"**#{rank} — {name}**")
-            if c.get("email"):
-                st.caption(f"✉ {c['email']}")
-            if c.get("skills"):
-                st.markdown("**Навыки:** " + ", ".join(c["skills"][:10]))
-            if c.get("experience_years") is not None:
-                st.caption(f"Опыт: {c['experience_years']:.1f} лет")
-            if c.get("education"):
-                st.caption(f"Образование: {c['education']}")
-        with col2:
-            st.metric("Итого", f"{overall:.2%}")
-            scores = {
-                "Семантика": rec.get("semantic_score"),
-                "TF-IDF": rec.get("tfidf_score"),
-                "LLM": rec.get("llm_score"),
-            }
-            for label, val in scores.items():
-                if val is not None:
-                    st.caption(f"{label}: {val:.2%}")
-
-        if rec.get("explanation"):
-            st.info(f"💬 {rec['explanation']}")
+    if st.button("Найти кандидатов", key="adhoc_search"):
+        if not adhoc_text.strip():
+            st.warning("Введите текст вакансии.")
+        else:
+            with st.spinner("Оценка кандидатов…"):
+                data = _get(
+                    "/recommendations",
+                    params={"job_text": adhoc_text, "limit": top_k_adhoc},
+                )
+            if data is None or not isinstance(data, dict):
+                st.warning("Данные не получены.")
+            else:
+                _render_recs(data.get("recommendations", []), top_k_adhoc)
 
 # ---------------------------------------------------------------------------
 # Candidates table

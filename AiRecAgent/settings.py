@@ -1,12 +1,12 @@
 import enum
 from pathlib import Path
-from tempfile import gettempdir
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from yarl import URL
 
-TEMP_DIR = Path(gettempdir())
-RESUME_UPLOAD_DIR = TEMP_DIR / "resumes"
+# <project_root>/AiRecAgent/settings.py → .parent.parent = project root
+_PROJECT_ROOT = Path(__file__).parent.parent
+RESUME_UPLOAD_DIR = _PROJECT_ROOT / "resumes"
 
 
 class LogLevel(enum.StrEnum):

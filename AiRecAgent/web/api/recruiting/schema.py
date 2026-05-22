@@ -58,7 +58,7 @@ class RecommendationDTO(BaseModel):
 class RecommendationListDTO(BaseModel):
     """Ranked list of candidate recommendations for a job."""
 
-    job_id: int
+    job_id: int | None
     recommendations: list[RecommendationDTO]
 
 

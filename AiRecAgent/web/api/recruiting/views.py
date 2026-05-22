@@ -8,6 +8,7 @@ from AiRecAgent.db.dao.candidate_dao import CandidateDAO
 from AiRecAgent.db.dao.job_dao import JobDAO
 from AiRecAgent.db.dao.match_dao import MatchDAO
 from AiRecAgent.db.dependencies import get_db_session
+from AiRecAgent.db.models.job_model import JobModel
 from AiRecAgent.services import email_service, job_parser, resume_parser
 from AiRecAgent.services.matching import orchestrator
 from AiRecAgent.settings import settings
@@ -180,7 +181,8 @@ async def delete_candidate(
 
 @router.get("/recommendations", response_model=RecommendationListDTO)
 async def get_recommendations(
-    job_id: int,
+    job_id: int | None = None,
+    job_text: str | None = None,
     limit: int = 5,
     refresh: bool = False,
     session: AsyncSession = Depends(get_db_session),
@@ -190,13 +192,63 @@ async def get_recommendations(
 ) -> RecommendationListDTO:
     """Return the top-N most relevant candidates for a given job.
 
-    Scores are read from the database cache when available. Pass ?refresh=true
-    to force recomputation via:
+    Accepts either ?job_id=123 (stored job) or ?job_text=... (ad-hoc text).
+    When job_id is used, scores are cached in the DB and reused on subsequent
+    calls. Pass ?refresh=true to force recomputation.
+    When job_text is used the request is always scored fresh — no caching.
+
+    Scoring pipeline:
     1. Semantic (Sentence-BERT cosine similarity)
     2. TF-IDF cosine similarity
     3. LLM (Claude) relevance scoring
     """
-    job = await job_dao.get_by_id(job_id)
+    if job_id is None and not job_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide either job_id or job_text query parameter.",
+        )
+
+    # --- raw job text branch (no DB record, no caching) ---
+    if job_text:
+        candidates = await candidate_dao.get_all(limit=1000)
+        if not candidates:
+            return RecommendationListDTO(job_id=job_id, recommendations=[])
+
+        ephemeral_job = JobModel(
+            id=0,
+            title="",
+            description=job_text,
+            requirements=None,
+            required_skills=None,
+            tech_stack=None,
+            embedding=None,
+        )
+        logger.info(
+            "get_recommendations: scoring {} candidate(s) against raw job_text ({} chars)",
+            len(candidates),
+            len(job_text),
+        )
+        scored = await orchestrator.get_recommendations(
+            job=ephemeral_job,
+            candidates=candidates,
+            session=session,
+            top_k=limit,
+        )
+        recs = [
+            RecommendationDTO(
+                candidate=CandidateDTO.model_validate(s.candidate),
+                semantic_score=s.semantic_score,
+                tfidf_score=s.tfidf_score,
+                llm_score=s.llm_score,
+                overall_score=s.overall_score,
+                explanation=s.explanation,
+            )
+            for s in scored
+        ]
+        return RecommendationListDTO(job_id=None, recommendations=recs)
+
+    # --- stored job branch (cached scoring) ---
+    job = await job_dao.get_by_id(job_id)  # type: ignore[arg-type]
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -204,12 +256,11 @@ async def get_recommendations(
     if not candidates:
         return RecommendationListDTO(job_id=job_id, recommendations=[])
 
-    cached = await match_dao.get_by_job_with_candidates(job_id)
+    cached = await match_dao.get_by_job_with_candidates(job_id)  # type: ignore[arg-type]
     cached_ids = {candidate.id for _, candidate in cached}
     all_ids = {c.id for c in candidates}
     new_ids = all_ids - cached_ids
 
-    # Determine which candidates actually need scoring.
     # On refresh: score everyone. Otherwise: only those without a cached score.
     score_only_ids: set[int] | None = None if refresh else new_ids
 
@@ -251,7 +302,7 @@ async def get_recommendations(
     for s in scored:
         await match_dao.upsert(
             candidate_id=s.candidate.id,
-            job_id=job_id,
+            job_id=job_id,  # type: ignore[arg-type]
             semantic_score=s.semantic_score,
             tfidf_score=s.tfidf_score,
             llm_score=s.llm_score,
@@ -261,7 +312,7 @@ async def get_recommendations(
 
     # Read the full ranked list back from the DB so old and new scores are
     # sorted together correctly.
-    cached = await match_dao.get_by_job_with_candidates(job_id)
+    cached = await match_dao.get_by_job_with_candidates(job_id)  # type: ignore[arg-type]
 
     recs = [
         RecommendationDTO(

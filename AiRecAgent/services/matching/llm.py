@@ -34,7 +34,7 @@ async def score_candidate(
     """
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=6, timeout=60.0)
     prompt = _SCORE_PROMPT.format(
         job_text=job_text[:2000],
         candidate_text=candidate_text[:2000],
